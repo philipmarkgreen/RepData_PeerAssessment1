@@ -5,21 +5,146 @@ output:
     keep_md: true
 ---
 
-
 ## Loading and preprocessing the data
-
-
-
+```{r scipen = 0, digits = 5}
+# Unzip the file and then load it. Check that it has the correct number of rows.
+unzip("activity.zip","activity.csv")
+steps <- read.csv("activity.csv") 
+if(nrow(steps) == 17568 ) {
+        print("File read successfully")
+} else {
+        print("File not read successfully. 17658 observations expected.")
+}
+head(steps)
+```
+ 
 ## What is mean total number of steps taken per day?
+ 
+```{r}
+# Remove the missing values from the dataset
+steps.sansna <- na.omit(steps)
+head(steps.sansna)
+```
+ 
+```{r}
+# Calculate the the number of steps taken per day
+steps.per.day <- aggregate( steps ~ date , data = steps.sansna , FUN = sum )
+head(steps.per.day)
+```
+ 
+```{r}
+# Create a histogram of the total number of steps taken each day
+hist(steps.per.day$steps, main="Histogram of frequency of steps taken per day",xlab="Steps taken per day")
+```
+ 
+```{r}
+# Avoid scientific notation
+options("scipen"=100, "digits"=4)
 
+# Calculate the mean steps per day
+mean.steps <- mean(steps.per.day$steps)
+```
+*The mean steps per day are `r mean.steps`*
 
+Calculate the median steps per day
+```{r}
+median.steps <- median(steps.per.day$steps)
+median.steps <- median.steps
+```
+*The median steps per day are `r median.steps`*
 
 ## What is the average daily activity pattern?
 
+```{r}
+# Calculate the average number of steps per interval and plot on a time series
+steps.per.interval <- aggregate( steps ~ interval , data = steps.sansna , FUN = mean )
+plot(steps.per.interval$interval, steps.per.interval$steps, xlab= "Interval", ylab= "Number of steps", type='l', col='red') 
+```
 
+
+```{r}
+# Calulate the interval that has the most steps on average
+max.interval <- steps.per.interval[which.max( steps.per.interval[,2] ),]$interval
+```
+*The interval that has the most steps on average is interval `r max.interval`*
 
 ## Imputing missing values
 
+```{r}
+# Calculate the number of missing values
+missing <- length(unique(unlist (lapply (steps, function (x) which (is.na (x))))))
+```
+*The number of missing values is `r missing`*
 
+**We will use the rounded mean steps for a given interval to fill in the missing values of a corresponding interval. We use rounded steps because it is not natural for the underlying data set to decimals.**
+```{r}
+steps.imputed <- steps
+steps.na.index <- unique(unlist (lapply (steps, function (x) which (is.na (x)))))
+steps.na <- steps[steps.na.index,]
+steps.imputed[steps.na.index,]$steps = unlist(lapply(steps.na$interval, function (x) round(steps.per.interval[which(steps.per.interval$interval==x),2])))
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+# Sum up the number of steps per day with imputed values added
+imputed.steps.per.day <- aggregate( steps ~ date , data = steps.imputed , FUN = sum )
+```
+
+```{r}
+#Create a histogram with imputed values added
+hist(imputed.steps.per.day$steps, main="Histogram of frequency of steps taken per day",xlab="Steps taken per day")
+```
+  
+```{r}
+# Calcuate the mean steps per day with imputed values added
+steps.imputed.mean <- mean(imputed.steps.per.day$steps)
+```
+*The mean steps per day, with imputed values added, are `r steps.imputed.mean`*
+
+```{r}
+# Calculate median steps per day with imputed values added
+steps.imputed.median <- median(imputed.steps.per.day$steps)
+```
+*The median steps per day, with imputed values added, are `r steps.imputed.median`*
+
+```{r}
+# Calculate percentage of replacements that were rounded down
+round.down.percentage <- round(sum(unlist(lapply(steps.na$interval, 
+                                function (x) round(steps.per.interval[which(steps.per.interval$interval==x),2]))) 
+                <= unlist(lapply(steps.na$interval, 
+                                function (x) steps.per.interval[which(steps.per.interval$interval==x),2])))
+                /nrow(steps.na)*100)
+```
+**The mean and median are now slightly lower. This is could in part be because `r round.down.percentage`% of the interval averages used were rounded down. This would need to be in combination with entire days having missed data. If you impute missing data then the total number of daily steps is likely to increase.** 
+
+## Are there differences in activity patterns between weekdays and weekends? 
+
+```{r}
+# Create a new factor variable in the dataset with two levels – “weekday” and
+# “weekend” indicating whether a given date is a weekday or weekend day.
+library(chron)
+steps.sansna$daytype <- NA
+steps.sansna$daytype = apply(steps.sansna,1, function(x) 
+        as.factor(if(is.weekend(x[2])) { "weekend" } else { "weekday" } ))
+head(steps.sansna)
+```
+
+```{r}
+# Calculate the average number of steps per interval for weekdays and weekends
+steps.interval.daytype <- aggregate(steps.sansna$steps,list(interval = steps.sansna$interval, daytype = steps.sansna$daytype),mean)
+colnames(steps.interval.daytype)[colnames(steps.interval.daytype)=="x"] <- "avg.steps"
+head(steps.interval.daytype)
+```
+
+```{r}
+# Make a panel plot containing a time series plot (i.e. type = "l") of the
+# 5-minute interval (x-axis) and the average number of steps taken, averaged
+# across all weekday days or weekend days (y-axis)
+library(lattice) 
+attach(steps.interval.daytype)
+xyplot( avg.steps~interval | daytype  , 
+  	main="Panel Plot of Weekday vs. Weekend",
+   xlab="Interval", ylab="Number of Steps",
+   layout=c(1,2), type="l")
+```
+ 
+ **There is definitely a difference between weekday and weekend patterns.**
